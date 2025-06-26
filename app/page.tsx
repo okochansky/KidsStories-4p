@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,6 +11,9 @@ export default function StoryBuilder() {
   const [generatedStory, setGeneratedStory] = useState("")
   const [generatedImages, setGeneratedImages] = useState<string[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false)
+  const [expandedImage, setExpandedImage] = useState<string | null>(null)
+  const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null)
 
   const addTextbox = () => {
     setStoryElements([...storyElements, ""])
@@ -30,32 +33,146 @@ export default function StoryBuilder() {
 
   const generateStory = async () => {
     setIsGenerating(true)
+    setGeneratedStory("")
+    setGeneratedImages([])
+    
+    try {
+      const validElements = storyElements.filter((el) => el.trim() !== "")
+      
+      if (validElements.length === 0) {
+        alert("Please enter at least one story element!")
+        setIsGenerating(false)
+        return
+      }
 
-    // Simulate story generation
-    setTimeout(() => {
-      const elements = storyElements.filter((el) => el.trim() !== "")
-      const sampleStory = `Once upon a time, in a magical land far away, there lived a brave little ${elements[0] || "hero"}. 
+      // Step 1: Generate the story first
+      const storyResponse = await fetch('/api/generate-story', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          storyElements: validElements
+        }),
+      })
 
-Every day, they would explore the enchanted forest where ${elements[1] || "magical creatures"} lived in harmony. The trees whispered ancient secrets, and the flowers sang beautiful melodies that filled the air with joy.
+      if (!storyResponse.ok) {
+        let errorMessage = `HTTP ${storyResponse.status}: ${storyResponse.statusText}`
+        try {
+          const errorData = await storyResponse.json()
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          // If we can't parse the error response, use the status text
+        }
+        throw new Error(errorMessage)
+      }
 
-One sunny morning, our hero discovered ${elements[2] || "a mysterious treasure"} hidden beneath a rainbow waterfall. This discovery would change their life forever, leading them on the most incredible adventure they could ever imagine.
-
-As they held the precious find in their hands, they realized that the real magic wasn't in what they found, but in the courage they discovered within themselves. From that day forward, they became known throughout the land as the bravest and kindest soul anyone had ever met.
-
-And they all lived happily ever after, sharing their adventures with friends and family, inspiring others to be brave and kind too.`
-
-      setGeneratedStory(sampleStory)
-      setGeneratedImages([
-        "/placeholder.svg?height=300&width=400",
-        "/placeholder.svg?height=300&width=400",
-        "/placeholder.svg?height=300&width=400",
-      ])
+      const storyData = await storyResponse.json()
+      setGeneratedStory(storyData.story)
       setIsGenerating(false)
-    }, 2000)
+
+      // Step 2: Now generate images in the background
+      generateImages(storyData.story)
+      
+    } catch (error) {
+      console.error('Error generating story:', error)
+      alert(`Error generating story: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setIsGenerating(false)
+    }
+  }
+
+  const generateImages = async (story: string) => {
+    setIsGeneratingImages(true)
+    
+    try {
+      const imageResponse = await fetch('/api/generate-images', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          story: story
+        }),
+      })
+
+      if (!imageResponse.ok) {
+        let errorMessage = `HTTP ${imageResponse.status}: ${imageResponse.statusText}`
+        try {
+          const errorData = await imageResponse.json()
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          // If we can't parse the error response, use the status text
+        }
+        throw new Error(errorMessage)
+      }
+
+      const imageData = await imageResponse.json()
+      
+      // Set the generated images
+      if (imageData.images && imageData.images.length > 0) {
+        const imageUrls = imageData.images.map((img: any) => img.url)
+        setGeneratedImages(imageUrls)
+      }
+      
+    } catch (error) {
+      console.error('Error generating images:', error)
+      // Show placeholder images if generation fails
+      setGeneratedImages([
+        "/placeholder.svg?height=300&width=400&text=Failed+to+load",
+        "/placeholder.svg?height=300&width=400&text=Failed+to+load", 
+        "/placeholder.svg?height=300&width=400&text=Failed+to+load",
+      ])
+    } finally {
+      setIsGeneratingImages(false)
+    }
+  }
+
+  const openImageModal = (imageUrl: string, index: number) => {
+    setExpandedImage(imageUrl)
+    setExpandedImageIndex(index)
+  }
+
+  const closeImageModal = () => {
+    setExpandedImage(null)
+    setExpandedImageIndex(null)
+  }
+
+  // Handle keyboard events and body scroll for modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && expandedImage) {
+        closeImageModal()
+      }
+    }
+
+    if (expandedImage) {
+      // Prevent body scrolling when modal is open
+      document.body.style.overflow = 'hidden'
+      document.addEventListener('keydown', handleKeyDown)
+    } else {
+      // Restore body scrolling when modal is closed
+      document.body.style.overflow = 'unset'
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset'
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [expandedImage])
+
+  // Handle keyboard events for modal (keeping the React version for the main div)
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && expandedImage) {
+      closeImageModal()
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 p-4">
+    <div 
+      className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 p-4"
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+    >
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
         <div className="text-center space-y-4 py-8">
@@ -125,7 +242,7 @@ And they all lived happily ever after, sharing their adventures with friends and
                 {isGenerating ? (
                   <div className="flex items-center gap-2">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    Creating Your Story...
+                    Writing Your Story...
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -158,23 +275,37 @@ And they all lived happily ever after, sharing their adventures with friends and
         )}
 
         {/* Generated Images */}
-        {generatedImages.length > 0 && (
+        {(generatedImages.length > 0 || isGeneratingImages) && (
           <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-2xl text-purple-700">Story Illustrations</CardTitle>
+              <CardTitle className="text-2xl text-purple-700">
+                Story Illustrations
+              </CardTitle>
+              {isGeneratingImages && (
+                <p className="text-sm text-purple-600 font-medium flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
+                  Creating beautiful illustrations for your story...
+                </p>
+              )}
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {generatedImages.map((image, index) => (
                   <div key={index} className="space-y-2">
-                    <div className="aspect-[4/3] rounded-xl overflow-hidden shadow-md bg-gradient-to-br from-purple-100 to-pink-100">
+                    <div 
+                      className="aspect-[4/3] rounded-xl overflow-hidden shadow-md bg-gradient-to-br from-purple-100 to-pink-100 cursor-pointer transform hover:scale-105 transition-transform duration-200"
+                      onClick={() => openImageModal(image, index)}
+                    >
                       <img
                         src={image || "/placeholder.svg"}
                         alt={`Story illustration ${index + 1}`}
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <p className="text-sm text-gray-600 text-center font-medium">Illustration {index + 1}</p>
+                    <p className="text-sm text-gray-600 text-center font-medium">
+                      Illustration {index + 1} 
+                      <span className="text-xs text-gray-400 block">Click to enlarge</span>
+                    </p>
                   </div>
                 ))}
               </div>
@@ -182,6 +313,46 @@ And they all lived happily ever after, sharing their adventures with friends and
           </Card>
         )}
       </div>
+
+      {/* Image Modal */}
+      {expandedImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={closeImageModal}
+        >
+          <div className="relative max-w-4xl max-h-full w-full h-full flex items-center justify-center">
+            <img
+              src={expandedImage}
+              alt={`Story illustration ${(expandedImageIndex || 0) + 1} - Expanded view`}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+            
+            {/* Close Button */}
+            <button
+              onClick={closeImageModal}
+              className="absolute top-4 right-4 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-full p-2 transition-all duration-200"
+              aria-label="Close image"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Image Info */}
+            <div className="absolute bottom-4 left-4 right-4 text-center">
+              <div className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg">
+                <p className="text-sm font-medium">
+                  Illustration {(expandedImageIndex || 0) + 1} of {generatedImages.length}
+                </p>
+                <p className="text-xs opacity-75 mt-1">
+                  Click anywhere outside the image or press ESC to close
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
