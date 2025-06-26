@@ -2,7 +2,6 @@
 
 > **Create enchanting children's stories with the power of AI!** Transform simple ideas into personalized adventures with beautiful illustrations that spark imagination and bring stories to life.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/orenk-taboolacoms-projects/v0-kid-story-website-builder)
 [![Powered by AI](https://img.shields.io/badge/Powered%20by-Gemini%20%26%20DALL--E-purple?style=for-the-badge)](https://github.com)
 [![Built with Next.js](https://img.shields.io/badge/Built%20with-Next.js%2015-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
 
